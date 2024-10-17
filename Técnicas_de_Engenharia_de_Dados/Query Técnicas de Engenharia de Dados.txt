@@ -1,0 +1,80 @@
+WITH sales_summary AS (
+    -- Agregação básica das vendas por produto, loja e cliente
+    SELECT 
+        s.product_id,
+        s.store_id,
+        s.customer_id,
+        DATE_TRUNC('month', s.sale_date) AS sale_month,
+        SUM(s.quantity) AS total_quantity_sold,
+        SUM(s.quantity * p.price) AS total_revenue,
+        ROW_NUMBER() OVER (PARTITION BY s.store_id ORDER BY SUM(s.quantity * p.price) DESC) AS sales_rank_in_store,
+        RANK() OVER (PARTITION BY p.category_id ORDER BY SUM(s.quantity * p.price) DESC) AS sales_rank_in_category
+    FROM sales s
+    INNER JOIN products p ON s.product_id = p.product_id
+    WHERE s.sale_date BETWEEN '2023-01-01' AND '2023-12-31'
+    GROUP BY s.product_id, s.store_id, s.customer_id, DATE_TRUNC('month', s.sale_date)
+),
+running_totals AS (
+    -- Cálculo de totais acumulados (running totals) mês a mês por produto e loja
+    SELECT
+        product_id,
+        store_id,
+        sale_month,
+        total_quantity_sold,
+        total_revenue,
+        SUM(total_revenue) OVER (PARTITION BY product_id, store_id ORDER BY sale_month) AS cumulative_revenue,
+        SUM(total_quantity_sold) OVER (PARTITION BY product_id, store_id ORDER BY sale_month) AS cumulative_quantity_sold
+    FROM sales_summary
+),
+monthly_growth AS (
+    -- Cálculo do crescimento percentual mês a mês das vendas
+    SELECT
+        product_id,
+        store_id,
+        sale_month,
+        total_revenue,
+        total_quantity_sold,
+        LAG(total_revenue, 1) OVER (PARTITION BY product_id, store_id ORDER BY sale_month) AS prev_month_revenue,
+        LAG(total_quantity_sold, 1) OVER (PARTITION BY product_id, store_id ORDER BY sale_month) AS prev_month_quantity,
+        (total_revenue - LAG(total_revenue, 1) OVER (PARTITION BY product_id, store_id ORDER BY sale_month)) / 
+        LAG(total_revenue, 1) OVER (PARTITION BY product_id, store_id ORDER BY sale_month) * 100 AS revenue_growth_pct,
+        (total_quantity_sold - LAG(total_quantity_sold, 1) OVER (PARTITION BY product_id, store_id ORDER BY sale_month)) / 
+        LAG(total_quantity_sold, 1) OVER (PARTITION BY product_id, store_id ORDER BY sale_month) * 100 AS quantity_growth_pct
+    FROM running_totals
+),
+category_share AS (
+    -- Cálculo da participação de cada produto nas vendas totais da categoria
+    SELECT
+        ss.product_id,
+        p.category_id,
+        ss.total_revenue,
+        SUM(ss.total_revenue) OVER (PARTITION BY p.category_id, ss.sale_month) AS total_revenue_category,
+        (ss.total_revenue / SUM(ss.total_revenue) OVER (PARTITION BY p.category_id, ss.sale_month)) * 100 AS product_share_of_category
+    FROM sales_summary ss
+    INNER JOIN products p ON ss.product_id = p.product_id
+)
+-- Consulta final para exibir todos os resultados
+SELECT 
+    p.product_name,
+    st.store_name,
+    c.customer_name,
+    cat.category_name,
+    ss.sale_month,
+    ss.total_quantity_sold,
+    ss.total_revenue,
+    rt.cumulative_revenue,
+    rt.cumulative_quantity_sold,
+    mg.revenue_growth_pct,
+    mg.quantity_growth_pct,
+    cs.product_share_of_category,
+    ss.sales_rank_in_store,
+    ss.sales_rank_in_category
+FROM sales_summary ss
+JOIN products p ON ss.product_id = p.product_id
+JOIN stores st ON ss.store_id = st.store_id
+JOIN customers c ON ss.customer_id = c.customer_id
+JOIN categories cat ON p.category_id = cat.category_id
+JOIN running_totals rt ON ss.product_id = rt.product_id AND ss.store_id = rt.store_id AND ss.sale_month = rt.sale_month
+JOIN monthly_growth mg ON ss.product_id = mg.product_id AND ss.store_id = mg.store_id AND ss.sale_month = mg.sale_month
+JOIN category_share cs ON ss.product_id = cs.product_id AND ss.sale_month = cs.sale_month
+ORDER BY ss.sale_month, ss.total_revenue DESC;

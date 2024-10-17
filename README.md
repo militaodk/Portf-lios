@@ -16,3 +16,5 @@ Profissional com mais de 8 anos de experiência em análise e manipulação de d
 3. [Previsão de Séries Temporais - Vendas](./Previsao_Series_Temporais/README.md)
 4. [Dashboard Interativo - BI em Python](./Dashboard_Interativo/README.md)
 5. [Machine Learning](./Modelo_Machine_Learning/README.md)
+6. [Técnicas de Engenharia de Dados](./Técnicas_de_Engenharia_de_Dados/README.md)
+7. [ETL](./ETL/README.md)

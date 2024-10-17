@@ -1,0 +1,58 @@
+-- Extração e Transformação de Produtos
+INSERT INTO dim_products (product_id, product_name, category_id, price)
+SELECT
+    p.product_id,
+    INITCAP(TRIM(p.product_name)) AS product_name,  -- Normalização do nome do produto (primeira letra maiúscula, remoção de espaços em branco)
+    c.category_id,
+    CASE 
+        WHEN p.price <= 0 THEN NULL  -- Validação de preços negativos ou nulos
+        ELSE p.price 
+    END AS price
+FROM raw_products p
+LEFT JOIN categories c ON p.category_raw = c.category_name  -- Mapeamento das categorias
+WHERE p.is_active = 1  -- Consideramos apenas os produtos ativos
+AND p.product_name IS NOT NULL;
+
+
+-- Extração e Transformação de Clientes
+INSERT INTO dim_customers (customer_id, customer_name, email, registration_date, status)
+SELECT
+    c.customer_id,
+    UPPER(TRIM(c.customer_name)) AS customer_name,  -- Padronização do nome do cliente em maiúsculas
+    LOWER(TRIM(c.email)) AS email,  -- Padronização do e-mail em minúsculas
+    CASE 
+        WHEN c.registration_date IS NULL THEN CURRENT_DATE  -- Se a data de registro estiver ausente, preencher com a data atual
+        ELSE c.registration_date
+    END AS registration_date,
+    CASE 
+        WHEN c.status IN ('active', 'inactive') THEN c.status  -- Garantir que o status seja válido
+        ELSE 'unknown'
+    END AS status
+FROM raw_customers c
+WHERE c.email LIKE '%@%.%'  -- Filtrar e-mails válidos com o formato mínimo esperado
+AND c.customer_name IS NOT NULL;
+
+
+-- Extração e Transformação de Vendas
+INSERT INTO fact_sales (sale_id, product_id, customer_id, store_id, sale_date, quantity, total_price)
+SELECT
+    s.sale_id,
+    dp.product_id,
+    dc.customer_id,
+    s.store_id,
+    CASE 
+        WHEN s.sale_date IS NULL THEN CURRENT_DATE
+        ELSE s.sale_date
+    END AS sale_date,
+    CASE
+        WHEN s.quantity < 1 THEN 1  -- Se a quantidade for inválida, definir como 1
+        ELSE s.quantity
+    END AS quantity,
+    s.quantity * dp.price AS total_price  -- Cálculo do preço total da venda
+FROM raw_sales s
+LEFT JOIN dim_products dp ON s.product_id = dp.product_id  -- Unir com a dimensão de produtos limpa
+LEFT JOIN dim_customers dc ON s.customer_id = dc.customer_id  -- Unir com a dimensão de clientes limpa
+WHERE s.sale_date BETWEEN '2023-01-01' AND '2023-12-31'  -- Filtrar por um período específico de tempo
+AND s.quantity > 0  -- Ignorar vendas com quantidade inválida
+AND dp.product_id IS NOT NULL  -- Filtrar produtos que foram mapeados corretamente
+AND dc.customer_id IS NOT NULL;  -- Filtrar clientes válidos
