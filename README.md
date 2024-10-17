@@ -15,3 +15,4 @@ Profissional com mais de 8 anos de experiência em análise e manipulação de d
 2. [Modelo de Classificação de Cancelamento de Clientes](./Modelo_Classifier/README.md)
 3. [Previsão de Séries Temporais - Vendas](./Previsao_Series_Temporais/README.md)
 4. [Dashboard Interativo - BI em Python](./Dashboard_Interativo/README.md)
+5. [Machine Learning](./Modelo_Machine_Learning/README.md)
